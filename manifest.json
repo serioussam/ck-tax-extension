@@ -9,10 +9,13 @@
       "matches": ["https://tax.creditkarma.com/taxes/CapitalGainsFullListSummary.action"],
       "js": [
         "lib/jquery-3.3.1.min.js",
+        "lib/xlsx.full.min.js",
         "importers/default.js",
         "importers/bitcoinTax.js",
         "importers/cointrackingInfo.js",
         "importers/fidelity.js",
+        "importers/wealthfront.js",
+        "importers/lendingclub.js",
         "CapitalGainsImporter.js"
       ]
     }

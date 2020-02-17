@@ -4,8 +4,12 @@ CKI.enabledImporters = {
 	"Default CSV": CKI.Importers.default,
 	"Fidelity Consolidated 1099 CSV": CKI.Importers.fidelity,
 	"Bitcoin.tax": CKI.Importers.bitcoinTax,
+	"Wealthfront xls": CKI.Importers.wealthfront,
+	"lendingclub xls": CKI.Importers.lendingclub,
 	"Cointracking.info CSV": CKI.Importers.coinTrackingInfo,
 };
+
+CKI.xls = ["Wealthfront xls","lendingclub xls"];
 
 CKI.init = function(evt) {
 	if (window.File && window.FileReader && window.FileList && window.Blob) {
@@ -29,6 +33,7 @@ CKI.render = function(evt) {
 
 	CKI.wrapperEl.appendChild(title);
 	referenceNode.appendChild(CKI.wrapperEl);
+	CKI.renderBelongsToSelect();
 	CKI.renderImportTypeSelect();
 	CKI.renderFileInput(evt);
 
@@ -63,6 +68,28 @@ CKI.renderImportTypeSelect = function(evt) {
 	CKI.wrapperEl.appendChild(CKI.selectImportTypeNode);
 }
 
+CKI.renderBelongsToSelect = function(evt) {
+	CKI.selectBelongsToNode = document.createElement("select");
+	CKI.placeholder = "Choose Belongs to";
+
+	var placeholder = document.createElement('option');
+	placeholder.disabled = true;
+	placeholder.selected = true;
+	placeholder.innerHTML = "Choose Belongs to"
+	CKI.selectBelongsToNode.appendChild(placeholder);
+
+	var bt = document.querySelector('[name="capitalGains[0].belongsTo"]');
+	var types = Object.keys(CKI.enabledImporters);
+	for (var i = 1; i<bt.options.length; i++){
+	    var opt = document.createElement('option');
+	    opt.value = bt.options[i].value;
+	    opt.innerHTML = bt.options[i].innerHTML;
+	    CKI.selectBelongsToNode.appendChild(opt);
+	}
+
+	CKI.wrapperEl.appendChild(CKI.selectBelongsToNode);
+}
+
 
 CKI.renderFileInput = function(evt) {
 	var aNode = document.createElement("input");
@@ -78,6 +105,16 @@ CKI.renderFileInput = function(evt) {
 	document.getElementById('files').addEventListener('change', CKI.handleFileSelect, false);
 }
 
+CKI.readFile = function(reader,file) {
+   var select = CKI.selectImportTypeNode;
+   var dataSource = select.options[select.selectedIndex].value;
+
+   if(CKI.xls.includes(dataSource)) {
+       reader.readAsArrayBuffer(file);
+   } else {
+       reader.readAsText(f);
+   }
+}
 
 CKI.handleFileSelect = function(evt) {
 	evt.stopPropagation();
@@ -96,8 +133,8 @@ CKI.handleFileSelect = function(evt) {
           CKI.addCsvDataToTable(dataSource, csvArray);
         };
       })(f);
-      // Read in the csv file
-      reader.readAsText(f);
+
+      CKI.readFile(reader, f);
     }
 }
 
@@ -137,12 +174,11 @@ CKI.inputRowData = function(dataSource, row) {
 		CKI.getNextEmptyRow().then(function(rowResp) {
 			var element = rowResp.element;
 			var formIndex = rowResp.formIndex;
-			var rowIndex = rowResp.rowIndex;
 
-			var ht = element.querySelector('[name="capitalGains['+formIndex+'].holdingType"]');
-			ht.value = data.holdingType;
+			var bt = element.querySelector('[name="capitalGains['+formIndex+'].belongsTo"]');
+			bt.value = CKI.selectBelongsToNode.value;
 
-			var rc = element.querySelector('[name="capitalGains['+formIndex+'].reported"]');
+			var rc = element.querySelector('[name="capitalGains['+formIndex+'].reportingCategory"]');
 			rc.value = data.reportingCategory;
 
 			var desc = element.querySelector('[name="capitalGains['+formIndex+'].description"]');
@@ -168,7 +204,7 @@ CKI.inputRowData = function(dataSource, row) {
 			sp.dispatchEvent(evt);
 			c.blur();
 
-			CKI.updateRowGainLoss(rowIndex);
+			CKI.updateRowGainLoss(element);
 
 			CKI.currentIndex++;
 			resolve();
@@ -178,14 +214,13 @@ CKI.inputRowData = function(dataSource, row) {
 
 CKI.sourceRowToCKData = function(dataSource, sourceObj) {
 	if(CKI.enabledImporters.hasOwnProperty(dataSource)) {
-		return CKI.enabledImporters[dataSource].parseCsvRow(sourceObj)
+		return CKI.enabledImporters[dataSource].parseCsvRow(sourceObj);
 	}
 
 	alert("Importer not found for: " + dataSource);
 }
 
-CKI.updateRowGainLoss = function(index){
-	var row = $("#row" + index);
+CKI.updateRowGainLoss = function(row){
 
 	var salesPrice = CKI.convertDollarAmount($(row).find(".salesPrice").val());
 	var cost = CKI.convertDollarAmount($(row).find(".cost").val());
@@ -245,16 +280,7 @@ CKI.getRowCount = function(){
 
 CKI.getNextEmptyRow = function() {
 	return new Promise(function(resolve, reject) {
-		//ck never renders a row with index of 10
-		if(CKI.currentIndex == 10) {
-			CKI.currentIndex++;
-		}
-
-		element = document.getElementById('row' + CKI.currentIndex);
-
-		//ck never renders a row with index of 10, but does render form elements with index 10 ????
-		var formIndex = (CKI.currentIndex > 10) ? CKI.currentIndex - 1 : CKI.currentIndex;
-
+        var element = document.querySelector('[name="capitalGains['+CKI.currentIndex+'].salesPrice"]');
 		if(!element) {
 			CKI.ckAddRowsBtn.click();
 			return CKI.getNextEmptyRow().then(function(r){
@@ -262,15 +288,15 @@ CKI.getNextEmptyRow = function() {
 					resolve(r);
 				}, 100);
 			});
-		}else if(element.querySelector('[name="capitalGains['+formIndex+'].salesPrice"]').value !== '0.00' ||
-				 element.querySelector('[name="capitalGains['+formIndex+'].cost"]').value !== '0.00' ||
-				 element.querySelector('[name="capitalGains['+formIndex+'].description"]').value !== '') {
+		}else if(document.querySelector('[name="capitalGains['+CKI.currentIndex+'].salesPrice"]').value !== '0.00' ||
+				 document.querySelector('[name="capitalGains['+CKI.currentIndex+'].cost"]').value !== '0.00' ||
+				 document.querySelector('[name="capitalGains['+CKI.currentIndex+'].description"]').value !== '') {
 			CKI.currentIndex++;
 			return CKI.getNextEmptyRow().then(resolve);
 
 		}
 
-		return resolve({ element: element, formIndex: formIndex, rowIndex: CKI.currentIndex});
+		return resolve({ element: element.parentElement.parentElement, formIndex: CKI.currentIndex});
 	});
 }
 
